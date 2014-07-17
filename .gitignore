@@ -1,2 +1,5 @@
-/data/*
+*.csv
+*.xls*
+*.db
+*.ipynb_checkpoints
 
