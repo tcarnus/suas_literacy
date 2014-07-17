@@ -30,10 +30,6 @@
 #     
 #     
 # + [Quick View of Dataset](#Quick-View-of-Dataset)
-#     + [Data Available For Classification](#Data-Available-For-Classification)
-#     + [Data Available For Regression](#Data-Available-For-Regression)
-# + [Write to SQLite DB](#Write-to-SQLite-DB)
-#     
 
 # <headingcell level=1>
 
