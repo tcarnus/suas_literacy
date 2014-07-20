@@ -7,7 +7,7 @@
 # 
 # ## Suas Educational Development - Literacy Intervention Investigation
 # 
-# # 01 Data Cleaning and Initial Exploration
+# # 01 Data Cleaning
 # 
 # Contact: Adelaide Nic Chartaigh [adelaide@suas.ie]("mailto:adelaide@suas.ie")  
 # Author: Jonathan Sedar [jon.sedar@applied.ai]("mailto:jon.sedar@applied.ai")  
@@ -23,13 +23,8 @@
 # #Contents
 # 
 # + [Setup](#Setup)  
-# 
-# 
 # + [Import Data](#Import-Data)
 #     + [Remove and Clean Features](#Remove-and-Clean-Features)
-#     
-#     
-# + [Quick View of Dataset](#Quick-View-of-Dataset)
 
 # <headingcell level=1>
 
@@ -114,7 +109,7 @@ df.drop(['id','age_at_test','date','reading_age'],axis=1,inplace=True)
 # <codecell>
 
 # simple lowercasing and null removal
-for feat in ['gender','preorpost', 'test','test_color']:
+for feat in ['gender','preorpost', 'test','testtype','test_color']:
     df[feat] = df[feat].apply(lambda x: x.lower().strip() if pd.isnull(x) == False else "unknown")
     print('\n{}\n'.format(df.groupby(feat).size()))
 
@@ -153,6 +148,9 @@ for feat in df.columns.values:
 ## drop percentile and dob for now, they're missing too much
 df.drop(['dob','percentile'],axis=1,inplace=True)
 
+## rename date1 to date
+df.rename(columns={'date1':'date'},inplace=True)
+
 # <codecell>
 
 ## drop entries without a score
@@ -181,32 +179,48 @@ ntests.describe()
 
 # <codecell>
 
-## who has 3 ??
-for tup in ntests[ntests > 2].index:
-    print(dfr.loc[tup])
+## who has 3 instances of a test ??
+dfr.loc[ntests[ntests > 2].index]
 
 # <codecell>
 
+## just for now, remove the third entry for these people with 3x reading tests
 
-# <codecell>
-
-## just for now, remove the third entry
-
-# stack the 2's
-df2s = dfr.copy()
-df2s.drop(df2s.index,inplace=True)
-for tup in ntests[ntests == 2].index:
-    df2s = pd.concat([df2s,dfr.loc[tup]],axis=0)
-
-# stack the 3's    
-df3s = dfr.copy()
-df3s.drop(df3s.index,inplace=True)
-for tup in ntests[ntests == 3].index:
-    dfrr = dfr.loc[tup].copy()
-    df3s = pd.concat([df3s,dfrr.loc[((dfrr.preorpost=='post') & (dfrr.test_color=='blue')) == False]],axis=0)
+df2s = dfr.loc[ntests[ntests == 2].index].copy()
+df3s = dfr.loc[ntests[ntests == 3].index].copy()
+df3s = df3s.loc[((df3s.preorpost=='post') & (df3s.test_color=='blue')) == False]
 
 # stack back together    
-df_clean = pd.concat([df2s,df3s],axis=0)    
+df_clean = pd.concat([df2s,df3s],axis=0)
+df_clean.shape
+
+# <codecell>
+
+### Have we taken care of all NaNs?
+for feat in df_clean.columns.values:
+    print('{}: {}: {}'.format(feat,df_clean.loc[pd.isnull(df_clean[feat])].shape[0],df_clean[feat].dtype))
+
+# <codecell>
+
+## remove test_color and ind, they're just cluttering the dataframe
+df_clean.drop(['test_color','ind'],axis=1,inplace=True)
+
+# <codecell>
+
+## reshape the dataframe to person-oriented
+df_clean.reset_index(inplace=True)
+df_clean.set_index(['code','schoolid','gender','test','testtype','preorpost'],inplace=True)
+df_piv = df_clean.unstack(['preorpost'])
+
+## flatten the multicolumn indexes and rename
+df_piv.columns = ['_'.join(col).strip() for col in df_piv.columns.values]
+
+## reapply correct datatypes
+for feat in ['age_pre','age_post','raw_score_pre','raw_score_post','staard_score_pre','staard_score_post']:
+    df_piv[feat] = df_piv[feat].astype(np.float64)
+
+print(df_piv.shape)
+df_piv.head()
 
 # <markdowncell>
 
@@ -216,35 +230,15 @@ df_clean = pd.concat([df2s,df3s],axis=0)
 
 ## write to local sqlite file
 cnx_sql3 = sqlite3.connect('data/SUAS_data_master_v001_tcc_cleaned.db')
-cnx_sql3.text_factory = str
-df_clean['date1'] = df_clean['date1'].apply(str)
-df_clean.to_sql('df_clean',cnx_sql3,if_exists='replace')
+#cnx_sql3.text_factory = str
+df_piv['date_pre'] = df_piv['date_pre'].apply(str)
+df_piv['date_post'] = df_piv['date_post'].apply(str)
+df_piv.to_sql('df_piv',cnx_sql3,if_exists='replace')
 cnx_sql3.close()
 
 # <markdowncell>
 
 # ---
-
-# <headingcell level=1>
-
-# Quick View of Dataset
-
-# <codecell>
-
-## Read cleaned dataset back from db
-cnx_sql3 = sqlite3.connect('data/SUAS_data_master_v001_tcc_cleaned.db')
-cnx_sql3.text_factory = str
-dfc = pd.read_sql('select * from df_clean', cnx_sql3, index_col='code', parse_dates='date1')
-cnx_sql3.close()
-
-print(dfc.shape)
-dfc.head()
-
-# <codecell>
-
-
-# <codecell>
-
 
 # <markdowncell>
 
