@@ -16,8 +16,11 @@
 # #Contents
 # 
 # + [Setup](#Setup)  
-# + [Import Data](#Import-Data) 
-# + [Visualisation and Single Feature Regression](#Visualisation-and-Single-Feature-Regression)
+# + [Import Data](#Import-Data)  
+# + [Frequentist Regression](#Frequentist-Regression)  
+# + [Bayesian Regression](#Bayesian-Regression)  
+#     + [Unpooled Models](#Unpooled-Models)  
+#     + [Hierarchical Models](#Hierarchical-Models)  
 
 # <headingcell level=1>
 
@@ -102,9 +105,17 @@ df['staard_score_delta'] = df['staard_score_post'] - df['staard_score_pre']
 df = df.sort_index(axis=1)
 df.head()
 
+# <markdowncell>
+
+# ---
+
 # <headingcell level=1>
 
-# Visualisation and Single Feature Regression
+# Frequentist Regression
+
+# <markdowncell>
+
+# ### Entire set
 
 # <codecell>
 
@@ -114,7 +125,7 @@ x = df['staard_score_pre']
 y = df['staard_score_post']
 
 cm_cmap = cm.get_cmap('hsv')
-fig, axes1d = plt.subplots(nrows=1, ncols=1, sharex=True, figsize=(12,6))
+fig, axes1d = plt.subplots(nrows=1, ncols=1, sharex=True, figsize=(8,8))
 fig.subplots_adjust(wspace=0.2)
 fig.suptitle('Correlation of pre-test and post-test scores')
 
@@ -134,14 +145,13 @@ ss_tot = np.sum((y - np.mean(y))**2)
 rsq = 1 - (ss_res/ss_tot)
 
 sp.annotate('R^2:  {:.2f}\nCoef: {:.2f}\nIntr: {:.2f}'.format(rsq,regr.coef_[0][0],regr.intercept_[0])
-                ,xy=(1,0),xycoords='axes fraction'
-                ,xytext=(-12,6),textcoords='offset points',color='green',weight='bold'
-                ,size=12,ha='right',va='bottom')
+                ,xy=(1,0),xycoords='axes fraction',xytext=(-12,6),textcoords='offset points'
+                ,color='green',weight='bold',size=12,ha='right',va='bottom')
 sp.set_ylabel('Post-test Score')
 sp.set_xlabel('Pre-test Score')
 sp.axes.grid(True,linestyle='-',color='lightgrey')
 
-plt.subplots_adjust(top=0.85)
+plt.subplots_adjust(top=0.95)
 plt.show()  
 
 # <codecell>
@@ -158,10 +168,15 @@ plt.show()
 
 # Bayesian Regression
 
+# <headingcell level=2>
+
+# Unpooled Models
+
 # <markdowncell>
 
-# ## Unpooled approach 
-# ... for comparison with Frequentist
+# Simple linear regression
+# 
+# ### Entire set
 
 # <codecell>
 
@@ -184,7 +199,7 @@ with pm.Model() as individual_model:
     likelihood = pm.Normal('event like', mu=y_est, sd=sigma, observed=y)
 
     # keep trace
-    traces = pm.sample(5000, step=pm.NUTS(), start=pm.find_MAP(), progressbar=True)
+    traces = pm.sample(10000, step=pm.NUTS(), start=pm.find_MAP(), progressbar=True)
 
     pm.traceplot(traces)
 
@@ -196,85 +211,108 @@ def plot_reg(sp, alpha, beta, sigma, xlims, maxlike=False):
     x = np.arange(xlims[0], xlims[1])
     y_est = eval('{} + {}*x'.format(alpha, beta))
     if maxlike:    
-        sp.plot(x, y_est, linewidth=3, linestyle='dashed', color='darkorange', alpha=0.8)
+        sp.plot(x, y_est, linewidth=3, linestyle='dashed', color='#00F5FF', alpha=0.8)
         sp.annotate('alpha: {:.2f}\nbeta:  {:.2f}\nsigma: {:.2f}'.format(alpha, beta, sigma)
                 ,xy=(1,0),xycoords='axes fraction',xytext=(-12,6),textcoords='offset points'
-                ,color='darkorange',weight='bold',size=12,ha='right',va='bottom')
+                ,color='#05B9B0',weight='bold',size=12,ha='right',va='bottom') # #FF5800
     else:
-        sp.plot(x, y_est, color='#333333', alpha=0.05)
+        sp.plot(x, y_est, color='#666666', alpha=0.05)
 
 cm_cmap = cm.get_cmap('hsv')
-fig, axes1d = plt.subplots(nrows=1, ncols=1, sharex=True, figsize=(12,6))
+fig, axes1d = plt.subplots(nrows=1, ncols=1, sharex=True, figsize=(8,8))
 fig.subplots_adjust(wspace=0.2)
 fig.suptitle('Correlation of pre-test and post-test scores - Bayesian')
 
 sp = axes1d
 clr = cm_cmap(0)
 sp.scatter(x=x,y=y,color=clr,alpha=0.5,edgecolor='#999999')
-plot_reg(sp, traces['alpha'].mean(), traces['beta'].mean(), traces['sigma'].mean()
-         ,xlims=[x.min(),x.max()],maxlike=True)  
 
-for i in xrange(1000,5000,50):
+for i in xrange(1000,5000,10):
     point = traces.point(i)
     plot_reg(sp, point['alpha'], point['beta'], point['sigma'], xlims=[x.min(),x.max()])
 
+plot_reg(sp, traces['alpha'].mean(), traces['beta'].mean(), traces['sigma'].mean()
+     ,xlims=[x.min(),x.max()],maxlike=True)  
+
 #plt.show()
 
-# <codecell>
+# <markdowncell>
 
-## try unpooled model first for test type
-
-unqvals_tests = np.unique(df.index.get_level_values('test').tolist())
-traces_unpooled = {}
-
-for testtype in unqvals_tests:
-
-    x = df.query('test=="{}"'.format(testtype))['staard_score_pre']
-    y = df.query('test=="{}"'.format(testtype))['staard_score_post']
-    
-    with pm.Model() as individual_model:
-        
-        # intercept prior (variance == sd**2) and slope prior
-        alpha = pm.Normal('alpha', mu=0, sd=100**2)
-        beta = pm.Normal('beta', mu=0, sd=100**2)
-    
-        # Model error prior
-        eps = pm.Uniform('eps', lower=0, upper=100)
-    
-        # Linear model
-        y_est = alpha + beta * x
-    
-        # Data likelihood
-        likelihood = pm.Normal('event like', mu=y_est, sd=eps, observed=y)
-        
-        # keep trace
-        traces_unpooled[testtype] = pm.sample(2000, step=pm.NUTS(), start=pm.find_MAP(), progressbar=True)
-        
-        # this is more robust to outliers you need stats model installed
-        # with pm.Model() as model_robust:
-        #    family = pm.glm.families.T()
-  
+# ### Testtype
 
 # <codecell>
 
-for testtype in unqvals_tests:
-    print('Estimates for: {}'.format(testtype))
-    tp = pm.traceplot(traces_unpooled[testtype])
-    tp.show()
+# ## try unpooled model first for test type
 
-# <codecell>
+# unqvals_tests = np.unique(df.index.get_level_values('test').tolist())
+# traces_unpooled = {}
 
-def plot_breg(formula, x_min, x_max):  
-    x = np.arange(x_min, x_max)
-    y_est = eval(formula)
-    plt.plot(x, y_est)  
+# for testtype in unqvals_tests:
+
+#     x = df.query('test=="{}"'.format(testtype))['staard_score_pre']
+#     y = df.query('test=="{}"'.format(testtype))['staard_score_post']
     
-plt.scatter(x,y)
-plot_breg('23 + 0.79*x', x.min(), x.max())
-plt.show()
+# etc  
 
 # <codecell>
 
+# for testtype in unqvals_tests:
+#     print('Estimates for: {}'.format(testtype))
+#     tp = pm.traceplot(traces_unpooled[testtype])
+#     tp.show()
+
+# <headingcell level=2>
+
+# Hierarchical Models
+
+# <markdowncell>
+
+# Hierarchical linear regression for test type
+# 
+# ### Testtype
+
+# <codecell>
+
+## run for test types
+
+unqvals = np.unique(df.index.get_level_values('test').tolist())
+idx_size = unqvals_tests.shape[0]
+unqvals_translator = {v:k for k,v in enumerate(unqvals_tests)}
+idxs = [unqvals_translator[v] for v in df.index.get_level_values('test').tolist()]
+
+x = df['staard_score_pre']
+y = df['staard_score_post']
+
+
+with pm.Model() as hierarchical_model:
+
+    # hyperpriors for group nodes, all uninformative
+    alpha_mu = pm.Normal('alpha_mu', mu=0., sd=100**2)
+    alpha_sigma = pm.Uniform('alpha_sigma', lower=0, upper=100)
+    beta_mu = pm.Normal('beta_mu', mu=0., sd=100**2)
+    beta_sigma = pm.Uniform('beta_sigma', lower=0, upper=100)
+    
+    # Intercept for each testtype, distributed around group mean mu_a
+    # Above we just set mu and sd to a fixed value while here we
+    # plug in a common group distribution for all a and b (which are
+    # vectors of length n_testtype).
+       
+    # priors for alpha, beta and model error, uninformative  
+    alpha = pm.Normal('alpha', mu=alpha_mu, sd=alpha_sigma, shape=idx_size)
+    beta = pm.Normal('beta', mu=beta_mu, sd=beta_sigma, shape=idx_size)
+    sigma = pm.Uniform('sigma', lower=0, upper=100)
+
+    # hierarchical linear model
+    y_est = alpha[idxs] + beta[idxs] * x
+
+    # Data likelihood
+    likelihood = pm.Normal('event_like', mu=y_est, sd=sigma, observed=y)
+
+    # keep trace
+    hierarchical_trace = pm.sample(20000, step=pm.Metropolis()
+                                   ,start=pm.find_MAP(), progressbar=True)
+
+    pm.traceplot(hierarchical_trace[3000:])
 
 # <codecell>
 
