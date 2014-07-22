@@ -19,8 +19,9 @@
 # + [Import Data](#Import-Data)  
 # + [Frequentist Regression](#Frequentist-Regression)  
 # + [Bayesian Regression](#Bayesian-Regression)  
-#     + [Unpooled Models](#Unpooled-Models)  
-#     + [Hierarchical Models](#Hierarchical-Models)  
+#     + [Entire Set](#Entire-Set)  
+#     + [Test Type](#Test-Type)  
+#     + [Gender](#Gender)  
 
 # <headingcell level=1>
 
@@ -171,13 +172,7 @@ plt.show()
 
 # <headingcell level=2>
 
-# Unpooled Models
-
-# <markdowncell>
-
-# Simple linear regression
-# 
-# ### Entire set
+# Entire Set
 
 # <codecell>
 
@@ -217,8 +212,8 @@ def plot_reg(sp, traces, x_actual, burn_ratio=0.25, ipoints=1000, usage='individ
     x = np.arange(x_actual.min(),x_actual.max())
     
     clrs = {}
-    clrs['individual'] = ['#00F5FF','#006266']
-    clrs['hierarchical'] = ['#FF7538','#661f00']
+    clrs['individual'] = ['#00F5FF','#006266','#00585C']
+    clrs['hierarchical'] = ['#FF7538','#661f00','#572610']
         
     # draw credible interval
     for i in np.vectorize(lambda x: int(x))\
@@ -240,7 +235,7 @@ def plot_reg(sp, traces, x_actual, burn_ratio=0.25, ipoints=1000, usage='individ
         sp.annotate('{}\nalpha: {:.2f}\nbeta:  {:.2f}'.format(usage
                 ,traces['alpha'].mean(),traces['beta'].mean())
                 ,xy=(1,0),xycoords='axes fraction',xytext=(-12,6),textcoords='offset points'
-                ,color=clrs[usage][0],weight='bold',size=12,ha='right',va='bottom')
+                ,color=clrs[usage][1],weight='bold',size=12,ha='right',va='bottom')
 
     else:
         sp.plot(x, eval('{} + {}*x'.format(
@@ -250,12 +245,15 @@ def plot_reg(sp, traces, x_actual, burn_ratio=0.25, ipoints=1000, usage='individ
         sp.annotate('{}\nalpha: {:.2f}\nbeta:  {:.2f}'.format(usage
                 ,traces['alpha'][:,col].mean(),traces['beta'][:,col].mean())
                 ,xy=(0,1),xycoords='axes fraction',xytext=(12,-6),textcoords='offset points'
-                ,color=clrs[usage][0],weight='bold',size=12,ha='left',va='top')
+                ,color=clrs[usage][1],weight='bold',size=12,ha='left',va='top')
 
 
 # <codecell>
 
 ## quick plot of regression (all)
+
+x = df['staard_score_pre']
+y = df['staard_score_post']
 
 cm_cmap = cm.get_cmap('Greys')
 fig, axes1d = plt.subplots(nrows=1, ncols=1, sharex=True, figsize=(8,8))
@@ -269,9 +267,13 @@ sp.scatter(x=x,y=y,s=40,color=clr,alpha=0.7,edgecolor='#333333')
 # regression fit    
 plot_reg(sp,traces,x)
 
+# <headingcell level=2>
+
+# Test Type
+
 # <markdowncell>
 
-# ### Testtype
+# ### Unpooled
 
 # <codecell>
 
@@ -305,63 +307,60 @@ for testtype in unqvals:
 
 # <codecell>
 
-burn_in_unpooled = 2000
-
+### view parameters
 for testtype in unqvals:
     print('Estimates for: {}'.format(testtype))
     pm.traceplot(traces_unpooled[testtype],figsize=(18,2*3))
 
-# <headingcell level=2>
-
-# Hierarchical Models
-
 # <markdowncell>
 
-# Hierarchical linear regression for test type
-# 
-# ### Testtype
+# ### Hierarchical
 
 # <codecell>
 
-## run for test types
+def get_traces_hierarchical(x, y, idxs, max_iter):
 
-#unqvals = np.unique(df.index.get_level_values('test').tolist())
-idx_size = unqvals.shape[0]
+    idx_size = len(np.unique(idxs))
+
+    with pm.Model() as hierarchical_model:
+
+        # hyperpriors for group nodes, all uninformative
+        alpha_mu = pm.Normal('alpha_mu', mu=0., sd=100**2)
+        alpha_sigma = pm.Uniform('alpha_sigma', lower=0, upper=100)
+        beta_mu = pm.Normal('beta_mu', mu=0., sd=100**2)
+        beta_sigma = pm.Uniform('beta_sigma', lower=0, upper=100)
+
+        # Intercept for each testtype, distributed around group mean mu_a
+        # Above we just set mu and sd to a fixed value while here we
+        # plug in a common group distribution for all a and b (which are
+        # vectors of length n_testtype).
+
+        # priors for alpha, beta and model error, uninformative  
+        alpha = pm.Normal('alpha', mu=alpha_mu, sd=alpha_sigma, shape=idx_size)
+        beta = pm.Normal('beta', mu=beta_mu, sd=beta_sigma, shape=idx_size)
+        sigma = pm.Uniform('sigma', lower=0, upper=100)
+
+        # hierarchical linear model
+        y_est = alpha[idxs] + beta[idxs] * x
+
+        # Data likelihood
+        likelihood = pm.Normal('likelihood', mu=y_est, sd=sigma, observed=y)
+
+        # keep trace
+        traces = pm.sample(max_iter, step=pm.Metropolis()
+                                       ,start=pm.find_MAP(), progressbar=True)
+    return traces
+
+# <codecell>
+
+## run traces
+unqvals = np.unique(df.index.get_level_values('test').tolist())
 unqvals_translator = {v:k for k,v in enumerate(unqvals)}
 idxs = [unqvals_translator[v] for v in df.index.get_level_values('test').tolist()]
-
 x = df['staard_score_pre']
 y = df['staard_score_post']
-
 max_iter = 200000
-
-with pm.Model() as hierarchical_model:
-
-    # hyperpriors for group nodes, all uninformative
-    alpha_mu = pm.Normal('alpha_mu', mu=0., sd=100**2)
-    alpha_sigma = pm.Uniform('alpha_sigma', lower=0, upper=100)
-    beta_mu = pm.Normal('beta_mu', mu=0., sd=100**2)
-    beta_sigma = pm.Uniform('beta_sigma', lower=0, upper=100)
-    
-    # Intercept for each testtype, distributed around group mean mu_a
-    # Above we just set mu and sd to a fixed value while here we
-    # plug in a common group distribution for all a and b (which are
-    # vectors of length n_testtype).
-       
-    # priors for alpha, beta and model error, uninformative  
-    alpha = pm.Normal('alpha', mu=alpha_mu, sd=alpha_sigma, shape=idx_size)
-    beta = pm.Normal('beta', mu=beta_mu, sd=beta_sigma, shape=idx_size)
-    sigma = pm.Uniform('sigma', lower=0, upper=100)
-
-    # hierarchical linear model
-    y_est = alpha[idxs] + beta[idxs] * x
-
-    # Data likelihood
-    likelihood = pm.Normal('likelihood', mu=y_est, sd=sigma, observed=y)
-
-    # keep trace
-    traces_hierarchical = pm.sample(max_iter, step=pm.Metropolis()
-                                   ,start=pm.find_MAP(), progressbar=True)
+traces_hierarchical = get_traces_hierarchical(x, y, idxs, max_iter)
 
 # <codecell>
 
@@ -374,8 +373,6 @@ with pm.Model() as hierarchical_model:
 # ### Plot comparison of hierarchical vs unpooled
 
 # <codecell>
-
-## comparison plot        
 
 fig, axes1d = plt.subplots(nrows=1, ncols=2, sharex=True, sharey=True, figsize=(18,8))
 fig.subplots_adjust(wspace=0.2)
@@ -390,8 +387,10 @@ for j, (sp, testtype) in enumerate(zip(axes1d,unqvals)):
 
     # datapoints and subplot titles
     sp.scatter(x=x,y=y,s=40,color=clr,alpha=0.7,edgecolor='#333333')
-    sp.annotate(testtype,xy=(0.5,1),xycoords='axes fraction',size=12,ha='center'
+    sp.annotate('{} ({} samples)'.format(testtype,len(x))
+                ,xy=(0.5,1),xycoords='axes fraction',size=12,ha='center'
                 ,xytext=(0,6),textcoords='offset points')
+
     
     # regression fit independent
     plot_reg(sp,traces_unpooled[testtype],x)
@@ -400,11 +399,103 @@ for j, (sp, testtype) in enumerate(zip(axes1d,unqvals)):
     plot_reg(sp,traces_hierarchical,x,usage='hierarchical',col=j)
         
 
+# <headingcell level=2>
+
+# Gender
+
+# <markdowncell>
+
+# ### Unpooled
+
 # <codecell>
 
+## unpooled model for gender
+
+unqvals = np.unique(df.index.get_level_values('gender').tolist())
+traces_unpooled = {}
+max_iter_unpooled = 10000
+
+for gender in unqvals:
+
+    x = df.query('gender=="{}"'.format(gender))['staard_score_pre']
+    y = df.query('gender=="{}"'.format(gender))['staard_score_post']
+    
+    with pm.Model() as individual_model:
+
+        # priors for intercept, slope and precision - all uninformative
+        alpha = pm.Normal('alpha', mu=0, sd=100**2)
+        beta = pm.Normal('beta', mu=0, sd=100**2)
+        sigma = pm.Uniform('sigma', lower=0, upper=100)
+
+        # Linear model
+        y_est = alpha + beta * x
+
+        # Data likelihood
+        likelihood = pm.Normal('likelihood', mu=y_est, sd=sigma, observed=y)
+
+        # keep trace
+        traces_unpooled[gender] = pm.sample(max_iter_unpooled, step=pm.NUTS()
+                                              ,start=pm.find_MAP() ,progressbar=True)
 
 # <codecell>
 
+### view parameters
+for gender in unqvals:
+    print('Estimates for: {}'.format(gender))
+    pm.traceplot(traces_unpooled[gender],figsize=(18,2*3))
+
+# <markdowncell>
+
+# ### Hierarchical
+
+# <codecell>
+
+## run traces
+unqvals = np.unique(df.index.get_level_values('gender').tolist())
+unqvals_translator = {v:k for k,v in enumerate(unqvals)}
+idxs = [unqvals_translator[v] for v in df.index.get_level_values('gender').tolist()]
+x = df['staard_score_pre']
+y = df['staard_score_post']
+max_iter = 200000
+
+traces_hierarchical = get_traces_hierarchical(x, y, idxs, max_iter)
+
+# <codecell>
+
+## quick plot of parameters
+with pm.Model() as hierarchical_model:
+    pm.traceplot(traces_hierarchical,figsize=(18,2*7))
+
+# <markdowncell>
+
+# ### Plot comparison of hierarchical vs unpooled
+
+# <codecell>
+
+unqvals = np.unique(df.index.get_level_values('gender').tolist())
+fig, axes1d = plt.subplots(nrows=1, ncols=2, sharex=True, sharey=True, figsize=(18,8))
+fig.subplots_adjust(wspace=0.2)
+fig.suptitle('Correlation of pre-test vs post-test scores - Bayesian Hierarchical Regression')
+cm_cmap = cm.get_cmap('Set1')
+
+for j, (sp, gender) in enumerate(zip(axes1d,unqvals)):
+
+    x = df.query('gender=="{}"'.format(gender))['staard_score_pre']
+    y = df.query('gender=="{}"'.format(gender))['staard_score_post']
+    clr = cm_cmap(j/len(unqvals))
+
+    # datapoints and subplot titles
+    sp.scatter(x=x,y=y,s=40,color=clr,alpha=0.7,edgecolor='#333333')
+    sp.annotate('{} ({} samples)'.format(gender,len(x))
+                ,xy=(0.5,1),xycoords='axes fraction',size=12,ha='center'
+                ,xytext=(0,6),textcoords='offset points')
+    
+    # regression fit independent
+    plot_reg(sp,traces_unpooled[gender],x)
+    
+    # regression fit hierarchical
+    plot_reg(sp,traces_hierarchical,x,usage='hierarchical',col=j)
+        
 
 # <codecell>
 

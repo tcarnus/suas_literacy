@@ -18,15 +18,10 @@ environment using the `requirements_conda.txt` file as a build recipe:
 
     conda create -n suas --file requirements_conda.txt
 
-PyMC is not (yet) in the conda repos so you'll need to get that separately using:
+The code uses PyMC3 which is still in Alpha, but has some great syntax and 
+processing benefits over v2.3. You can `pip install` it via:
 
-    conda install -c https://conda.binstar.org/pymc pymc
-
-And if you're using the latest gcc from homebrew, you may need to instead use
-
-    conda install -c https://conda.binstar.org/jonsedar pymc
-
-... which was built on OSX Mavericks 10.9.4 with homebrew gcc 4.8.3.
+    pip install git+https://github.com/pymc-devs/pymc
 
 
 To use/exit the Anaconda environment:
