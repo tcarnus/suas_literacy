@@ -22,6 +22,8 @@ numpy=1.8.1=py27_0
 openpyxl=1.8.5=py27_0
 openssl=1.0.1h=0
 pandas=0.14.1=np18py27_0
+patsy=0.2.1=np18py27_0
+pip=1.5.6=py27_0
 pygments=1.6=py27_0
 pyparsing=2.0.1=py27_0
 pyqt=4.10.4=py27_0
@@ -39,6 +41,7 @@ sip=4.15.5=py27_0
 six=1.7.3=py27_0
 sqlite=3.8.4.1=0
 ssl_match_hostname=3.4.0.2=py27_0
+statsmodels=0.5.0=np18py27_0
 tk=8.5.15=0
 tornado=3.2.1=py27_0
 xlrd=0.9.3=py27_0

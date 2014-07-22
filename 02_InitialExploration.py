@@ -202,7 +202,7 @@ with pm.Model() as individual_model:
     # keep trace
     traces = pm.sample(10000, step=pm.NUTS(), start=pm.find_MAP(), progressbar=True)
 
-    pm.traceplot(traces)
+    pm.traceplot(traces,figsize=(18,2*3))
 
 # <markdowncell>
 
@@ -210,37 +210,64 @@ with pm.Model() as individual_model:
 
 # <codecell>
 
+# define plot for regression lines
+def plot_reg(sp, traces, x_actual, burn_ratio=0.25, ipoints=1000, usage='individual',col=0):  
+    
+    burn_start = int(burn_ratio*len(traces))
+    x = np.arange(x_actual.min(),x_actual.max())
+    
+    clrs = {}
+    clrs['individual'] = ['#00F5FF','#006266']
+    clrs['hierarchical'] = ['#FF7538','#661f00']
+        
+    # draw credible interval
+    for i in np.vectorize(lambda x: int(x))\
+                    (np.linspace(burn_start,len(traces),ipoints,endpoint=False)):
+        if usage == 'individual':
+            point = traces.point(i)
+            sp.plot(x, eval('{} + {}*x'.format(point['alpha'], point['beta']))
+                ,color=clrs[usage][1], alpha=0.02)
+        else:
+            sp.plot(x, eval('{} + {}*x'.format(traces['alpha'][i][j], traces['beta'][i][j]))
+                ,color=clrs[usage][1], alpha=0.02)            
+
+    # draw mean and annotation
+    if usage == 'individual':
+        sp.plot(x, eval('{} + {}*x'.format(
+                    traces['alpha'].mean(), traces['beta'].mean()))
+                    ,linewidth=2, color=clrs[usage][0], alpha=0.8)
+
+        sp.annotate('{}\nalpha: {:.2f}\nbeta:  {:.2f}'.format(usage
+                ,traces['alpha'].mean(),traces['beta'].mean())
+                ,xy=(1,0),xycoords='axes fraction',xytext=(-12,6),textcoords='offset points'
+                ,color=clrs[usage][0],weight='bold',size=12,ha='right',va='bottom')
+
+    else:
+        sp.plot(x, eval('{} + {}*x'.format(
+                    traces['alpha'][:,col].mean(), traces['beta'][:,col].mean()))
+                    ,linewidth=2, color=clrs[usage][0], alpha=0.8)
+    
+        sp.annotate('{}\nalpha: {:.2f}\nbeta:  {:.2f}'.format(usage
+                ,traces['alpha'][:,col].mean(),traces['beta'][:,col].mean())
+                ,xy=(0,1),xycoords='axes fraction',xytext=(12,-6),textcoords='offset points'
+                ,color=clrs[usage][0],weight='bold',size=12,ha='left',va='top')
+
+
+# <codecell>
+
 ## quick plot of regression (all)
 
-def plot_reg(sp, alpha, beta, sigma, xlims, maxlike=False):  
-    x = np.arange(xlims[0], xlims[1])
-    y_est = eval('{} + {}*x'.format(alpha, beta))
-    if maxlike:    
-        sp.plot(x, y_est, linewidth=3, linestyle='dashed', color='#00F5FF', alpha=0.8)
-        sp.annotate('{}\nalpha: {:.2f}\nbeta:  {:.2f}\nsigma: {:.2f}'.format(
-                    'individual',alpha, beta, sigma)
-                ,xy=(1,0),xycoords='axes fraction',xytext=(-12,6),textcoords='offset points'
-                ,color='#05B9B0',weight='bold',size=12,ha='right',va='bottom') # #FF5800
-    else:
-        sp.plot(x, y_est, color='#006266', alpha=0.04)
-
-cm_cmap = cm.get_cmap('hsv')
+cm_cmap = cm.get_cmap('Greys')
 fig, axes1d = plt.subplots(nrows=1, ncols=1, sharex=True, figsize=(8,8))
 fig.subplots_adjust(wspace=0.2)
 fig.suptitle('Correlation of pre-test and post-test scores - Bayesian')
-
 sp = axes1d
-clr = cm_cmap(0.6)
-sp.scatter(x=x,y=y,color=clr,alpha=0.6,edgecolor='#999999')
+clr = cm_cmap(0.5)
 
-for i in xrange(1000,5000,10):
-    point = traces.point(i)
-    plot_reg(sp, point['alpha'], point['beta'], point['sigma'], xlims=[x.min(),x.max()])
-
-plot_reg(sp, traces['alpha'].mean(), traces['beta'].mean(), traces['sigma'].mean()
-     ,xlims=[x.min(),x.max()],maxlike=True)  
-
-#plt.show()
+# datapoints
+sp.scatter(x=x,y=y,s=40,color=clr,alpha=0.7,edgecolor='#333333')
+# regression fit    
+plot_reg(sp,traces,x)
 
 # <markdowncell>
 
@@ -254,7 +281,7 @@ unqvals = np.unique(df.index.get_level_values('test').tolist())
 traces_unpooled = {}
 max_iter_unpooled = 10000
 
-for testtype in unqvals_tests:
+for testtype in unqvals:
 
     x = df.query('test=="{}"'.format(testtype))['staard_score_pre']
     y = df.query('test=="{}"'.format(testtype))['staard_score_post']
@@ -298,9 +325,9 @@ for testtype in unqvals:
 
 ## run for test types
 
-# unqvals = np.unique(df.index.get_level_values('test').tolist())
-idx_size = unqvals_tests.shape[0]
-unqvals_translator = {v:k for k,v in enumerate(unqvals_tests)}
+#unqvals = np.unique(df.index.get_level_values('test').tolist())
+idx_size = unqvals.shape[0]
+unqvals_translator = {v:k for k,v in enumerate(unqvals)}
 idxs = [unqvals_translator[v] for v in df.index.get_level_values('test').tolist()]
 
 x = df['staard_score_pre']
@@ -339,7 +366,6 @@ with pm.Model() as hierarchical_model:
 # <codecell>
 
 ## quick plot of parameters
-burn_in = 50000
 with pm.Model() as hierarchical_model:
     pm.traceplot(traces_hierarchical,figsize=(18,2*7))
 
@@ -349,23 +375,12 @@ with pm.Model() as hierarchical_model:
 
 # <codecell>
 
-def plot_reg_hier(sp, alpha, beta, sigma, xlims, maxlike=False):  
-    x = np.arange(xlims[0], xlims[1])
-    y_est = eval('{} + {}*x'.format(alpha, beta))
-    if maxlike:    
-        sp.plot(x, y_est, linewidth=3, linestyle='dashed', color='#FF7538', alpha=0.8)
-        sp.annotate('{}\nalpha: {:.2f}\nbeta:  {:.2f}\nsigma: {:.2f}'.format(
-                    'hierarchical',alpha, beta, sigma)
-                ,xy=(0,1),xycoords='axes fraction',xytext=(12,-6),textcoords='offset points'
-                ,color='#FF7538',weight='bold',size=12,ha='left',va='top')
-    else:
-        sp.plot(x, y_est, color='#661f00', alpha=0.03)
-
+## comparison plot        
 
 fig, axes1d = plt.subplots(nrows=1, ncols=2, sharex=True, sharey=True, figsize=(18,8))
 fig.subplots_adjust(wspace=0.2)
-fig.suptitle('Correlation of pre-test and post-test scores - Bayesian Hierarchical Regression')
-cm_cmap = cm.get_cmap('hsv')
+fig.suptitle('Correlation of pre-test vs post-test scores - Bayesian Hierarchical Regression')
+cm_cmap = cm.get_cmap('Set1')
 
 for j, (sp, testtype) in enumerate(zip(axes1d,unqvals)):
 
@@ -373,35 +388,17 @@ for j, (sp, testtype) in enumerate(zip(axes1d,unqvals)):
     y = df.query('test=="{}"'.format(testtype))['staard_score_post']
     clr = cm_cmap(j/len(unqvals))
 
-    # points
-    sp.scatter(x=x,y=y,color=clr,alpha=0.6,edgecolor='#999999')
+    # datapoints and subplot titles
+    sp.scatter(x=x,y=y,s=40,color=clr,alpha=0.7,edgecolor='#333333')
     sp.annotate(testtype,xy=(0.5,1),xycoords='axes fraction',size=12,ha='center'
                 ,xytext=(0,6),textcoords='offset points')
-
-    # unpooled
-    for i in np.vectorize(lambda x: int(round(x,0)))\
-                    (np.linspace(burn_in_unpooled,max_iter_unpooled,500,endpoint=False)):
-        traces = traces_unpooled[testtype]
-        point = traces.point(i)
-        plot_reg(sp, point['alpha'], point['beta'], point['sigma'], xlims=[x.min(),x.max()])
-
-    plot_reg(sp, traces['alpha'].mean(),traces['beta'].mean(),traces['sigma'].mean()
-                    ,xlims=[x.min(),x.max()],maxlike=True)  
-
     
-    # hierarchical
-    for i in np.vectorize(lambda x: int(round(x,0)))\
-                    (np.linspace(burn_in,max_iter,500,endpoint=False)):
-        alpha = traces_hierarchical['alpha'][i][j]
-        beta = traces_hierarchical['beta'][i][j]
-        sigma = traces_hierarchical['sigma'][i]    # TODO: redundant in this call, refactor
-        plot_reg_hier(sp, alpha, beta, sigma, xlims=[x.min(),x.max()])
-
-    plot_reg_hier(sp, traces_hierarchical['alpha'][:,j].mean()
-                    ,traces_hierarchical['beta'][:,j].mean()
-                    ,traces_hierarchical['sigma'].mean()
-                    ,xlims=[x.min(),x.max()],maxlike=True)
+    # regression fit independent
+    plot_reg(sp,traces_unpooled[testtype],x)
     
+    # regression fit hierarchical
+    plot_reg(sp,traces_hierarchical,x,usage='hierarchical',col=j)
+        
 
 # <codecell>
 

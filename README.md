@@ -2,9 +2,9 @@
 
 Suas literacy analysis in Python
 
-Contact: Adelaide Nic Chartaigh adelaide@suas.ie
-Author: Jonathan Sedar jon.sedar@applied.ai
-Date: Spring / Summer 2014
+Contact: Adelaide Nic Chartaigh adelaide@suas.ie  
+Author: Jonathan Sedar jon.sedar@applied.ai  
+Date: Spring / Summer 2014  
 
 
 Basic analyses in Python, intending to use a PyMC approach to allow hierarchical bayesian regression
