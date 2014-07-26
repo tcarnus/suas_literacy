@@ -17,14 +17,15 @@
 # 
 # + [Setup](#Setup)
 #     + [Local Functions](#Local-Functions)
-#     + [Import Data](#Import-Data)  
+#     + [Import Data](#Import-Data)
+#     + [Outlier Removal](#Outlier-Removal)
 # + [Frequentist Regression](#Frequentist-Regression)  
 # + [Bayesian Regression](#Bayesian-Regression)  
 #     + [Entire Set](#Entire-Set)  
 #     + [Test Type](#Test-Type)  
 #     + [Gender](#Gender)
-#     + [Age](#Age)
-#     + [Date](#Date)
+#     + [Binned Age](#Binned-Age)
+#     + [Binned PreScore](#Binned-PreScore)
 
 # <headingcell level=1>
 
@@ -93,7 +94,8 @@ def get_traces_individual(x, y, max_iter=10000):
         alpha = pm.Normal('alpha', mu=0, sd=100**2)
         beta = pm.Normal('beta', mu=0, sd=100**2)
         epsilon = pm.Uniform('epsilon', lower=0, upper=100)
-
+        #epsilon = pm.Normal('epsilon', mu=0, sd=100**2)
+        
         # individual linear model
         y_est = alpha + beta * x
         likelihood = pm.Normal('likelihood', mu=y_est, sd=epsilon, observed=y)
@@ -207,15 +209,37 @@ def plot_reg_bayes(df, xy, traces_ind, traces_hier, feat='no_feat', burn_ind=200
 ## Read cleaned dataset back from db
 cnx_sql3 = sqlite3.connect('data/SUAS_data_master_v001_tcc_cleaned.db')
 cnx_sql3.text_factory = str
-df = pd.read_sql('select * from df_piv', cnx_sql3, index_col=['code','schoolid','gender','test','testtype']
+dfa = pd.read_sql('select * from df_piv', cnx_sql3, index_col=['code','schoolid','gender','test','testtype']
                  , parse_dates=['date_pre','date_post'])
 cnx_sql3.close()
 
-df = df.sort_index(axis=1)
-df.reset_index(inplace=True)
-df.set_index('code',inplace=True)
-print(df.shape)
-df.head()
+dfa = dfa.sort_index(axis=1)
+dfa.reset_index(inplace=True)
+dfa.set_index('code',inplace=True)
+
+print(dfa.shape)
+dfa.head()
+
+# <headingcell level=2>
+
+# Outlier Removal
+
+# <codecell>
+
+## View pre scores
+dfa.boxplot(column='staard_score_pre',by='testtype',sym='k+',vert=False
+                            ,widths=0.8,notch=True,bootstrap=1000,figsize=[12,3.5])
+
+# <markdowncell>
+
+# **Observe**
+# + There's a single sample in `paired_reading_wrat` that has a prescore > 140.
+# + This outlier ought to be removed from the modelling since it's going to adversely affect linear regression models
+
+# <codecell>
+
+df = dfa.loc[dfa.staard_score_pre < 140].copy()
+df.shape
 
 # <markdowncell>
 
@@ -286,7 +310,7 @@ xy={'x':'staard_score_pre', 'y':'staard_score_post'}
 
 # <markdowncell>
 
-# **(Unpooled)**
+# **(Run as individual)**
 
 # <codecell>
 
@@ -297,8 +321,8 @@ traces_ind_all['all'] = get_traces_individual(df[xy['x']], df[xy['y']], max_iter
 # <codecell>
 
 ## view parameters
-# p = pm.traceplot(traces_ind_all['all'],figsize=(18,1.5*3))
-# plt.show(p)
+p = pm.traceplot(traces_ind_all['all'],figsize=(18,1.5*3))
+plt.show(p)
 
 # <markdowncell>
 
@@ -306,7 +330,7 @@ traces_ind_all['all'] = get_traces_individual(df[xy['x']], df[xy['y']], max_iter
 
 # <codecell>
 
-plot_reg_bayes(df,xy,traces_ind_all,None,burn_ind=200)
+plot_reg_bayes(df,xy,traces_ind_all,None,burn_ind=2000)
 
 # <headingcell level=2>
 
@@ -370,7 +394,7 @@ plot_reg_bayes(df, xy ,traces_ind_testtype, traces_hier_testtype
 
 # <codecell>
 
-## unpooled model for gender
+## run sampling
 unqvals_gender = np.unique(df.gender)
 traces_ind_gender = OrderedDict()
 for gender in unqvals_gender:
@@ -414,20 +438,24 @@ plot_reg_bayes(df, xy ,traces_ind_gender, traces_hier_gender
 
 # <headingcell level=2>
 
-# Age
+# Binned Age
 
 # <markdowncell>
 
-# Bin age into 1-yearly sub groups
+# Bin age at pre-score into 1-yearly sub groups
 
 # <codecell>
 
 # Bin age
 df['binned_age_pre'] = df['age_pre'].apply(lambda x: round(x,0))
 
+# <markdowncell>
+
+# ### Unpooled
+
 # <codecell>
 
-## unpooled model for gender
+## run sampling
 unqvals_binned_age = np.unique(df.binned_age_pre)
 traces_ind_binned_age = OrderedDict()
 for binned_age in unqvals_binned_age:
@@ -469,11 +497,68 @@ traces_hier_binned_age = get_traces_hierarchical(df[xy['x']], df[xy['y']], idxs,
 plot_reg_bayes(df, xy ,traces_ind_binned_age, traces_hier_binned_age
                , feat='binned_age_pre', burn_ind=2000, burn_hier=50000)
 
+# <headingcell level=2>
+
+# Binned PreScore
+
+# <markdowncell>
+
+# Bin pre-score into sub groups [0,90), [90, 110), [110,inf)
+
 # <codecell>
 
+# Bin prescore
+df.loc[df.staard_score_pre < 90,'binned_staard_score_pre'] = 's < 90'
+df.loc[(df.staard_score_pre >= 90) & (df.staard_score_pre < 110),'binned_staard_score_pre'] = '90 <= s < 110'
+df.loc[df.staard_score_pre >= 110,'binned_staard_score_pre'] = 's <= 110'
+
+# <markdowncell>
+
+# ### Unpooled
 
 # <codecell>
 
+## run samples
+unqvals_binned_prescore = ['s < 90', '90 <= s < 110', 's <= 110']
+traces_ind_binned_prescore = OrderedDict()
+for binned_prescore in unqvals_binned_prescore:
+    x = df.loc[df.binned_staard_score_pre == binned_prescore, 'staard_score_pre']
+    y = df.loc[df.binned_staard_score_pre == binned_prescore, 'staard_score_post']
+    traces_ind_binned_prescore[binned_prescore] = get_traces_individual(x, y, max_iter=10000)  
+    
+
+# <codecell>
+
+## view parameters
+# for binned_prescore in unqvals_binned_prescore:
+#     print('Estimates for: {}'.format(binned_prescore))
+#     pm.traceplot(traces_ind_binned_prescore[binned_prescore],figsize=(18,1.5*3))
+
+# <markdowncell>
+
+# ### Hierarchical
+
+# <codecell>
+
+## run sampling
+unqvals_translator = {v:k for k,v in enumerate(unqvals_binned_prescore)}
+idxs = [unqvals_translator[v] for v in df.binned_staard_score_pre]
+traces_hier_binned_prescore = get_traces_hierarchical(df[xy['x']], df[xy['y']], idxs, max_iter=100000)
+
+# <codecell>
+
+## view parameters
+with pm.Model() as hierarchical_model:
+    pm.traceplot(traces_hier_binned_prescore,figsize=(18,1.5*7))
+
+# <markdowncell>
+
+# ### Plot comparison of hierarchical vs unpooled
+
+# <codecell>
+
+plot_reg_bayes(df, xy ,traces_ind_binned_prescore, traces_hier_binned_prescore
+               , feat='binned_staard_score_pre', burn_ind=2000, burn_hier=50000)
 
 # <markdowncell>
 
