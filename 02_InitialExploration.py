@@ -3,7 +3,7 @@
 
 # <markdowncell>
 
-# <div style="float:right"><img src='files/assets/img/Suas_Logo_Header.png'></img></div>
+# <div style="float:right"><img src='assets/img/Suas_Logo_Header.png'></img></div>
 # 
 # ## Suas Educational Development - Literacy Intervention Investigation
 # 
@@ -86,17 +86,17 @@ remove_punct_map = dict.fromkeys(map(ord, string.punctuation))
 
 # <codecell>
 
-def get_traces_unpooled(x, y, max_iter=10000):
-    """ sample unpooled """
+def get_traces_individual(x, y, max_iter=10000):
+    """ sample individual model """
     
-    with pm.Model() as hierarchical_model:
+    with pm.Model() as individual_model:
 
         # priors for alpha, beta and model error, uninformative  
         alpha = pm.Normal('alpha', mu=0, sd=100**2)
         beta = pm.Normal('beta', mu=0, sd=100**2)
         epsilon = pm.Uniform('epsilon', lower=0, upper=100)
 
-        # hierarchical linear model
+        # individual linear model
         y_est = alpha + beta * x
         likelihood = pm.Normal('likelihood', mu=y_est, sd=epsilon, observed=y)
         traces = pm.sample(max_iter, step=pm.NUTS(), start=pm.find_MAP(), progressbar=True)
@@ -105,7 +105,7 @@ def get_traces_unpooled(x, y, max_iter=10000):
 
 
 def get_traces_hierarchical(x, y, idxs, max_iter=100000):
-    """ sample hierarchical """
+    """ sample hierarchical model """
     
     idx_size = len(np.unique(idxs))
     with pm.Model() as hierarchical_model:
@@ -131,75 +131,6 @@ def get_traces_hierarchical(x, y, idxs, max_iter=100000):
         traces = pm.sample(max_iter, step=pm.Metropolis()
                                        ,start=pm.find_MAP(), progressbar=True)
     return traces
-
-
-def plot_reg(sp, traces, x_actual, burn_ratio=0.25, ipoints=1000, usage='individual', col=0):  
-    """ create plot for bayesian derived regression lines """
-    
-    burn_start = int(burn_ratio*len(traces))
-    x = np.arange(x_actual.min(),x_actual.max())
-    
-    clrs = {}
-    clrs['individual'] = ['#00F5FF','#006266','#00585C']
-    clrs['hierarchical'] = ['#FF7538','#661f00','#572610']
-        
-    # draw credible interval
-    for i in np.vectorize(lambda x: int(x))\
-                    (np.linspace(burn_start,len(traces),ipoints,endpoint=False)):
-        if usage == 'individual':
-            point = traces.point(i)
-            sp.plot(x, eval('{} + {}*x'.format(point['alpha'], point['beta']))
-                ,color=clrs[usage][1], alpha=0.02)
-        else:
-            sp.plot(x, eval('{} + {}*x'.format(traces['alpha'][i][j], traces['beta'][i][j]))
-                ,color=clrs[usage][1], alpha=0.02)            
-
-    # draw mean and annotation
-    if usage == 'individual':
-        sp.plot(x, eval('{} + {}*x'.format(
-                    traces['alpha'].mean(), traces['beta'].mean()))
-                    ,linewidth=2, color=clrs[usage][0], alpha=0.8)
-
-        sp.annotate('{}\nalpha: {:.2f}\nbeta:  {:.2f}'.format(usage
-                ,traces['alpha'].mean(),traces['beta'].mean())
-                ,xy=(1,0),xycoords='axes fraction',xytext=(-12,6),textcoords='offset points'
-                ,color=clrs[usage][1],weight='bold',size=12,ha='right',va='bottom')
-
-    else:
-        sp.plot(x, eval('{} + {}*x'.format(
-                    traces['alpha'][:,col].mean(), traces['beta'][:,col].mean()))
-                    ,linewidth=2, color=clrs[usage][0], alpha=0.8)
-    
-        sp.annotate('{}\nalpha: {:.2f}\nbeta:  {:.2f}'.format(usage
-                ,traces['alpha'][:,col].mean(),traces['beta'][:,col].mean())
-                ,xy=(0,1),xycoords='axes fraction',xytext=(12,-6),textcoords='offset points'
-                ,color=clrs[usage][1],weight='bold',size=12,ha='left',va='top')
-
-        
-        
-        
-        
-
-        
-        
-# def plot_MCMC_model(ax, xdata, ydata, trace):
-#     """Plot the linear model and 2sigma contours"""
-#     ax.plot(xdata, ydata, 'ok')
-
-#     alpha, beta = trace[:2]
-#     xfit = np.linspace(-20, 120, 10)
-#     yfit = alpha[:, None] + beta[:, None] * xfit
-#     mu = yfit.mean(0)
-#     sig = 2 * yfit.std(0)
-
-#     ax.plot(xfit, mu, '-k')
-#     ax.fill_between(xfit, mu - sig, mu + sig, color='lightgray')
-
-#     ax.set_xlabel('x')
-#     ax.set_ylabel('y')
-        
-        
-        
 
 # <headingcell level=2>
 
@@ -269,11 +200,7 @@ sp.axes.grid(True,linestyle='-',color='lightgrey')
 plt.subplots_adjust(top=0.95)
 plt.show()  
 
-# <codecell>
-
-## scores pre vs post for test type
-
-## TODO
+## TODO: ## scores pre vs post for test type
 
 # <markdowncell>
 
@@ -283,25 +210,28 @@ plt.show()
 
 # Bayesian Regression
 
+# <codecell>
+
+xy={'x':'staard_score_pre', 'y':'staard_score_post'}
+
 # <headingcell level=2>
 
 # Entire Set
 
 # <markdowncell>
 
-# ### Unpooled
+# **(Unpooled)**
 
 # <codecell>
 
 ## sample
-x = df['staard_score_pre']
-y = df['staard_score_post']
-traces_unpooled = get_traces_unpooled(x, y, max_iter=1000)
+traces_ind_all = {}
+traces_ind_all['all'] = get_traces_individual(df[xy['x']], df[xy['y']], max_iter=10000)
 
 # <codecell>
 
-## plot traces
-p = pm.traceplot(traces_unpooled,figsize=(18,2*3))
+# plot traces
+p = pm.traceplot(traces_ind_all['all'],figsize=(18,1.5*3))
 plt.show(p)
 
 # <markdowncell>
@@ -310,137 +240,77 @@ plt.show(p)
 
 # <codecell>
 
-## quick plot of regression (all)
+## quick plot of regression 
 
-xy = {'x':'staard_score_pre', 'y':'staard_score_post'}
-feat='no_feat'
-traces_hier = None
-
-#def plot_reg_single(df, xy={}, traces_unpooled={}, feat='no_feat', traces_hierarchical=None):  
-""" create plot for bayesian derived regression lines, no groups """
-
-
-fig, axes1d = plt.subplots(nrows=1, ncols=1, sharex=True, sharey=True, figsize=(6*1,6))
-fig.suptitle('Bayesian hierarchical regression of pre-test vs post-test scores')
-cm_cmap = cm.get_cmap('Set3')
-
-# for j, (sp, key) in enumerate(zip(axes1d,keys)):
-
-sp = axes1d
-
-clr = cm_cmap(0)
-x = df.loc[:,xy['x']]
-y = df.loc[:,xy['y']]
-
-if feat != 'no_feat':
-    x = df.loc[df.loc[feat] == key,xy['x']]
-    y = df.loc[df.loc[feat] == key,xy['y']]               
+def plot_reg_bayes(df, xy, traces_ind, traces_hier, feat='no_feat', burn_ind=2000, burn_hier=None):
+    """ create plot for bayesian derived regression lines, no groups """
     
-# datapoints and subplot titles
-sp.scatter(x,y,s=40,color=clr,alpha=0.7,edgecolor='#333333')
-sp.annotate('{} ({} samples)'.format('all',len(x))
+    keys = traces_ind.keys()         
+    fig, axes1d = plt.subplots(nrows=1, ncols=len(keys), sharex=True, sharey=True, figsize=(8*len(keys),8))
+    fig.suptitle('Bayesian hierarchical regression of pre-test vs post-test scores')
+    cm_cmap = cm.get_cmap('Set3')
+
+    clrs = {}
+    clrs['ind'] = ['#00F5FF','#006266','#00585C']
+    clrs['hier'] = ['#FF7538','#661f00','#572610']  
+    
+    if len(keys) == 1:
+        axes1d = [axes1d]
+        
+    for j, (sp, key) in enumerate(zip(axes1d,keys)):
+       
+        # scatterplot datapoints and subplot count title
+        x = df.loc[:,xy['x']]
+        y = df.loc[:,xy['y']]
+
+        if feat != 'no_feat':
+            x = df.loc[df[feat] == key,xy['x']]
+            y = df.loc[df[feat] == key,xy['y']]               
+
+        sp.scatter(x,y,s=40,color=cm_cmap(j/len(keys)),alpha=0.7,edgecolor='#333333')
+        sp.annotate('{} ({} samples)'.format(key,len(x))
             ,xy=(0.5,1),xycoords='axes fraction',size=14,ha='center'
             ,xytext=(0,6),textcoords='offset points')
 
-# unpooled
-alpha = traces_unpooled['alpha'][burn_in:]
-beta = traces_unpooled['beta'][burn_in:]
-
-xfit = np.linspace(x.min(), x.max(), 10)
-yfit = alpha[:, None] + beta[:, None] * xfit   # <- gnarly vectorized code!
-mu = yfit.mean(0)
-sig = 2 * yfit.std(0)
-
-sp.plot(xfit, mu,linewidth=2, color='#00F5FF', alpha=0.8)
-sp.fill_between(xfit, mu - sig, mu + sig, color='#006266',alpha=0.1)
-    
-    
-if traces_hier is not None:    
-    # heirarchical
-    alpha = traces_hier[key]['alpha'][burn_in:].mean()
-    beta = traces_heir[key]['beta'][burn_in:].mean()
-
-    xfit = np.linspace(x.min(), x.max(), 10)
-    yfit = alpha + beta * xfit
-    mu = yfit.mean(0)
-    sig = 2 * yfit.std(0)
-
-    #     ax.plot(xfit, mu, '-k')
-    #     ax.fill_between(xfit, mu - sig, mu + sig, color='lightgray')
-
-    sp.plot(xfit, yfit,linewidth=2, color='#00F5FF', alpha=0.8)
-    sp.fill_between(xfit, yfit - sig, yfit + sig, color='#006266',alpha=0.6)
-    
-
-    
-#        plot_reg(sp,traces_hierarchical,x,usage='hierarchical',col=j,burn_ratio=0.5, ipoints=10)
-
-plt.show()
-
-
-
-
-
-#keys = traces_unpooled.keys()
-# fig, axes1d = plt.subplots(nrows=1, ncols=len(keys), sharex=True, sharey=True, figsize=(4*len(keys),4))
-
-
-
-
-# p = plot_reg2(df, {'x':'staard_score_pre', 'y':'staard_score_pre'}, traces_unpooled, feat=False)
-# plt.show(p)
-
-
-
-    
-#     burn_start = int(burn_ratio*len(traces))
-#     x = np.arange(x_actual.min(),x_actual.max())
-    
-#     clrs = {}
-#     clrs['individual'] = ['#00F5FF','#006266','#00585C']
-#     clrs['hierarchical'] = ['#FF7538','#661f00','#572610']
+        # plot regression: individual
+        alpha = traces_ind[key]['alpha'][burn_ind:]
+        beta = traces_ind[key]['beta'][burn_ind:]
+        xfit = np.linspace(x.min(), x.max(), 10)
         
-#     # draw credible interval
-#     for i in np.vectorize(lambda x: int(x))\
-#                     (np.linspace(burn_start,len(traces),ipoints,endpoint=False)):
-#         if usage == 'individual':
-#             point = traces.point(i)
-#             sp.plot(x, eval('{} + {}*x'.format(point['alpha'], point['beta']))
-#                 ,color=clrs[usage][1], alpha=0.02)
-#         else:
-#             sp.plot(x, eval('{} + {}*x'.format(traces['alpha'][i][j], traces['beta'][i][j]))
-#                 ,color=clrs[usage][1], alpha=0.02)            
-
-#     # draw mean and annotation
-#     if usage == 'individual':
-#         sp.plot(x, eval('{} + {}*x'.format(
-#                     traces['alpha'].mean(), traces['beta'].mean()))
-#                     ,linewidth=2, color=clrs[usage][0], alpha=0.8)
-
-#         sp.annotate('{}\nalpha: {:.2f}\nbeta:  {:.2f}'.format(usage
-#                 ,traces['alpha'].mean(),traces['beta'].mean())
-#                 ,xy=(1,0),xycoords='axes fraction',xytext=(-12,6),textcoords='offset points'
-#                 ,color=clrs[usage][1],weight='bold',size=12,ha='right',va='bottom')
-
-#     else:
-#         sp.plot(x, eval('{} + {}*x'.format(
-#                     traces['alpha'][:,col].mean(), traces['beta'][:,col].mean()))
-#                     ,linewidth=2, color=clrs[usage][0], alpha=0.8)
-    
-#         sp.annotate('{}\nalpha: {:.2f}\nbeta:  {:.2f}'.format(usage
-#                 ,traces['alpha'][:,col].mean(),traces['beta'][:,col].mean())
-#                 ,xy=(0,1),xycoords='axes fraction',xytext=(12,-6),textcoords='offset points'
-#                 ,color=clrs[usage][1],weight='bold',size=12,ha='left',va='top')        
-
-       
+        yfit = alpha[:, None] + beta[:, None] * xfit   # <- yfit for all samples at x in xfit ind
+        mu = yfit.mean(0)
+        yerr_975 = np.percentile(yfit,97.5,axis=0)
+        yerr_025 = np.percentile(yfit,2.5,axis=0)
         
+        sp.plot(xfit, mu,linewidth=2, color=clrs['ind'][0], alpha=0.8)
+        sp.fill_between(xfit, yerr_025, yerr_975, color=clrs['ind'][2],alpha=0.3)
+        sp.annotate('{}\nslope:  {:.2f}\nincpt: {:.2f}'.format(
+                                'individual',beta.mean(),alpha.mean())
+                ,xy=(1,0),xycoords='axes fraction',xytext=(-12,6),textcoords='offset points'
+                ,color=clrs['ind'][1],weight='bold',size=12,ha='right',va='bottom')
 
+        # plot regression: hierarchical
+        if traces_hier is not None:    
+            alpha = traces_hier['alpha'][burn_hier:,j].T
+            beta = traces_hier['beta'][burn_hier:,j].T
+            xfit = np.linspace(x.min(), x.max(), 10)
+            yfit = alpha[:, None] + beta[:, None] * xfit
+            mu = yfit.mean(0)
+            yerr_975 = np.percentile(yfit,97.5,axis=0)
+            yerr_025 = np.percentile(yfit,2.5,axis=0)
 
+            sp.plot(xfit, mu,linewidth=2, color=clrs['hier'][0], alpha=0.8)
+            sp.fill_between(xfit, yerr_025, yerr_975, color=clrs['hier'][2], alpha=0.3)
+            sp.annotate('{}\nslope:  {:.2f}\nincpt:  {:.2f}'.format(
+                                        'hierarchical',beta.mean(),alpha.mean())
+                ,xy=(0,1),xycoords='axes fraction',xytext=(12,-6),textcoords='offset points'
+                ,color=clrs['hier'][1],weight='bold',size=12,ha='left',va='top')
+        
+    plt.show()
 
+# <codecell>
 
-
-
-
+plot_reg_bayes(df,xy,traces_ind_all,None,burn_ind=200)
 
 # <headingcell level=2>
 
@@ -452,22 +322,21 @@ plt.show()
 
 # <codecell>
 
-## unpooled model for test type
-
+## run sampling
 unqvals_testtype = np.unique(df.testtype)
-traces_unpooled = {}
+traces_ind_testtype = {}
 
 for testtype in unqvals_testtype:
-    x = df.loc[df.testtype == testtype, 'staard_score_pre']
-    y = df.loc[df.testtype == testtype, 'staard_score_post']
-    traces_unpooled[testtype] = get_traces_unpooled(x, y, max_iter=10000)
+    x = df.loc[df.testtype == testtype, xy['x']]
+    y = df.loc[df.testtype == testtype, xy['y']]
+    traces_ind_testtype[testtype] = get_traces_individual(x, y, max_iter=10000)
 
 # <codecell>
 
-### view parameters
-for testtype in unqvals:
-    print('Estimates for: {}'.format(testtype))
-    pm.traceplot(traces_unpooled[testtype],figsize=(18,2*3))
+## view parameters
+# for testtype in unqvals_testtype:
+#     print('Estimates for: {}'.format(testtype))
+#     pm.traceplot(traces_ind_testtype[testtype],figsize=(18,1.5*3))
 
 # <markdowncell>
 
@@ -475,19 +344,16 @@ for testtype in unqvals:
 
 # <codecell>
 
-## run traces
-unqvals_testtype = np.unique(df.testtype)
+## run sampling
 unqvals_translator = {v:k for k,v in enumerate(unqvals_testtype)}
 idxs = [unqvals_translator[v] for v in df.testtype]
-x = df['staard_score_pre']
-y = df['staard_score_post']
-traces_hierarchical = get_traces_hierarchical(x, y, idxs, max_iter=200000)
+traces_hier_testtype = get_traces_hierarchical(df[xy['x']], df[xy['y']], idxs, max_iter=100000)
 
 # <codecell>
 
-## quick plot of parameters
-with pm.Model() as hierarchical_model:
-    pm.traceplot(traces_hierarchical,figsize=(18,2*7))
+## view parameters
+# with pm.Model() as hierarchical_model:
+#     pm.traceplot(traces_hier_testtype,figsize=(16,1.5*7))
 
 # <markdowncell>
 
@@ -495,27 +361,8 @@ with pm.Model() as hierarchical_model:
 
 # <codecell>
 
-fig, axes1d = plt.subplots(nrows=1, ncols=len(unqvals_testtype), sharex=True, sharey=True, figsize=(18,6))
-fig.subplots_adjust(wspace=0.2)
-fig.suptitle('Correlation of pre-test vs post-test scores - Bayesian Hierarchical Regression')
-cm_cmap = cm.get_cmap('Set1')
-    
-for j, (sp, testype) in enumerate(zip(axes1d,unqvals_testtype)):
-
-    print('{}: {}'.format(j,testype))
-    clr = cm_cmap(j/len(unqvals_testtype))
-    x = df.loc[df.testtype == testtype, 'staard_score_pre']
-    y = df.loc[df.testtype == testtype, 'staard_score_post']
-    
-    # datapoints and subplot titles
-    sp.scatter(x=x,y=y,s=40,color=clr,alpha=0.7,edgecolor='#333333')
-    sp.annotate('{} ({} samples)'.format(testtype,len(x))
-                ,xy=(0.5,1),xycoords='axes fraction',size=14,ha='center'
-                ,xytext=(0,6),textcoords='offset points')
-
-    plot_reg(sp,traces_unpooled[testtype],x,burn_ratio=0.25, ipoints=10)
-#    plot_reg(sp,traces_hierarchical,x,usage='hierarchical',col=j,burn_ratio=0.5, ipoints=10)    
-    
+plot_reg_bayes(df, xy ,traces_ind_testtype, traces_hier_testtype
+               , feat='testtype', burn_ind=2000, burn_hier=50000)
 
 # <headingcell level=2>
 
