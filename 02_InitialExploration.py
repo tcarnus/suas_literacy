@@ -85,7 +85,7 @@ remove_punct_map = dict.fromkeys(map(ord, string.punctuation))
 
 # <codecell>
 
-def get_traces_individual(x, y, max_iter=10000):
+def get_traces_individual(x, y, max_iter=10000,quad=False):
     """ sample individual model """
     
     with pm.Model() as individual_model:
@@ -94,10 +94,15 @@ def get_traces_individual(x, y, max_iter=10000):
         alpha = pm.Normal('alpha', mu=0, sd=100**2)
         beta = pm.Normal('beta', mu=0, sd=100**2)
         epsilon = pm.Uniform('epsilon', lower=0, upper=100)
-        #epsilon = pm.Normal('epsilon', mu=0, sd=100**2)
         
-        # individual linear model
+        # configure model
         y_est = alpha + beta * x
+        
+        if quad:
+            gamma = pm.Normal('gamma', mu=0, sd=100**2)
+            y_est = alpha + beta * x + gamma * x ** 2
+
+        # calc likelihood and do sampling
         likelihood = pm.Normal('likelihood', mu=y_est, sd=epsilon, observed=y)
         traces = pm.sample(max_iter, step=pm.NUTS(), start=pm.find_MAP(), progressbar=True)
     
@@ -134,7 +139,7 @@ def get_traces_hierarchical(x, y, idxs, max_iter=100000):
 
 
 
-def plot_reg_bayes(df, xy, traces_ind, traces_hier, feat='no_feat', burn_ind=2000, burn_hier=None):
+def plot_reg_bayes(df, xy, traces_ind, traces_hier, feat='no_feat', burn_ind=2000, burn_hier=None, quad=False):
     """ create plot for bayesian derived regression lines, no groups """
     
     keys = traces_ind.keys()         
@@ -164,38 +169,47 @@ def plot_reg_bayes(df, xy, traces_ind, traces_hier, feat='no_feat', burn_ind=200
             ,xy=(0.5,1),xycoords='axes fraction',size=14,ha='center'
             ,xytext=(0,6),textcoords='offset points')
 
+        xfit = np.linspace(x.min(), x.max(), 10)
+        
         # plot regression: individual
         alpha = traces_ind[key]['alpha'][burn_ind:]
         beta = traces_ind[key]['beta'][burn_ind:]
-        xfit = np.linspace(x.min(), x.max(), 10)
-        
         yfit = alpha[:, None] + beta[:, None] * xfit   # <- yfit for all samples at x in xfit ind
+        note = '{}\nslope:  {:.2f}\nincpt: {:.2f}'.format('individual',beta.mean(),alpha.mean())
+        
+        if quad:
+            gamma = traces_ind[key]['gamma'][burn_ind:]
+            yfit = alpha[:, None] + beta[:, None] * xfit + gamma[:, None] * xfit ** 2
+            note = '{}\ny={:.2f} + {:.2f}x + {:.2f}x^2'.format('individual',alpha.mean(),beta.mean(),gamma.mean())
+        
         mu = yfit.mean(0)
         yerr_975 = np.percentile(yfit,97.5,axis=0)
         yerr_025 = np.percentile(yfit,2.5,axis=0)
         
         sp.plot(xfit, mu,linewidth=2, color=clrs['ind'][0], alpha=0.8)
         sp.fill_between(xfit, yerr_025, yerr_975, color=clrs['ind'][2],alpha=0.3)
-        sp.annotate('{}\nslope:  {:.2f}\nincpt: {:.2f}'.format(
-                                'individual',beta.mean(),alpha.mean())
-                ,xy=(1,0),xycoords='axes fraction',xytext=(-12,6),textcoords='offset points'
+        sp.annotate(note,xy=(1,0),xycoords='axes fraction',xytext=(-12,6),textcoords='offset points'
                 ,color=clrs['ind'][1],weight='bold',size=12,ha='right',va='bottom')
 
         # plot regression: hierarchical
         if traces_hier is not None:    
             alpha = traces_hier['alpha'][burn_hier:,j]
             beta = traces_hier['beta'][burn_hier:,j]
-            xfit = np.linspace(x.min(), x.max(), 10)
             yfit = alpha[:, None] + beta[:, None] * xfit
+            note = '{}\nslope:  {:.2f}\nincpt: {:.2f}'.format('hierarchical',beta.mean(),alpha.mean())
+            
+#             if quad:
+#                 gamma = traces_hier['gamma'][burn_hier:,j]
+#                 yfit = alpha[:, None] + beta[:, None] * xfit + gamma[:, None] * xfit ** 2
+#                 note = '{}\ny={:.2f} + {:.2f}x + {:.2f}x^2'.format('individual',alpha.mean(),beta.mean(),gamma.mean())
+            
             mu = yfit.mean(0)
             yerr_975 = np.percentile(yfit,97.5,axis=0)
             yerr_025 = np.percentile(yfit,2.5,axis=0)
 
             sp.plot(xfit, mu,linewidth=2, color=clrs['hier'][0], alpha=0.8)
             sp.fill_between(xfit, yerr_025, yerr_975, color=clrs['hier'][2], alpha=0.3)
-            sp.annotate('{}\nslope:  {:.2f}\nincpt:  {:.2f}'.format(
-                                        'hierarchical',beta.mean(),alpha.mean())
-                ,xy=(0,1),xycoords='axes fraction',xytext=(12,-6),textcoords='offset points'
+            sp.annotate(note, xy=(0,1),xycoords='axes fraction',xytext=(12,-6),textcoords='offset points'
                 ,color=clrs['hier'][1],weight='bold',size=12,ha='left',va='top')
         
     plt.show()
@@ -292,6 +306,15 @@ plt.show()
 
 ## TODO: ## scores pre vs post for test type
 
+# <codecell>
+
+## What's the range of deltas?
+
+df['staard_score_delta'] = df['staard_score_post'] - df['staard_score_pre']
+
+df.boxplot(column='staard_score_delta',by='testtype',sym='k+',vert=False
+                            ,widths=0.8,notch=True,bootstrap=1000,figsize=[12,3.5])
+
 # <markdowncell>
 
 # ---
@@ -331,6 +354,26 @@ plt.show(p)
 # <codecell>
 
 plot_reg_bayes(df,xy,traces_ind_all,None,burn_ind=2000)
+
+# <markdowncell>
+
+# **Try Quadratic**
+
+# <codecell>
+
+## run sampling
+traces_ind_all_quad = OrderedDict()
+traces_ind_all_quad['all'] = get_traces_individual(df[xy['x']], df[xy['y']], max_iter=10000, quad=True)
+
+# <codecell>
+
+## view parameters
+p = pm.traceplot(traces_ind_all_quad['all'],figsize=(18,1.5*4))
+plt.show(p)
+
+# <codecell>
+
+plot_reg_bayes(df,xy,traces_ind_all_quad,None,burn_ind=2000, quad=True)
 
 # <headingcell level=2>
 
@@ -467,9 +510,9 @@ for binned_age in unqvals_binned_age:
 # <codecell>
 
 ## view parameters
-# for binned_age in unqvals_binned_age:
-#     print('Estimates for: {}'.format(binned_age))
-#     pm.traceplot(traces_ind_binned_age[binned_age],figsize=(18,1.5*3))
+for binned_age in unqvals_binned_age:
+    print('Estimates for: {}'.format(binned_age))
+    pm.traceplot(traces_ind_binned_age[binned_age],figsize=(18,1.5*3))
 
 # <markdowncell>
 
@@ -508,9 +551,9 @@ plot_reg_bayes(df, xy ,traces_ind_binned_age, traces_hier_binned_age
 # <codecell>
 
 # Bin prescore
-df.loc[df.staard_score_pre < 90,'binned_staard_score_pre'] = 's < 90'
-df.loc[(df.staard_score_pre >= 90) & (df.staard_score_pre < 110),'binned_staard_score_pre'] = '90 <= s < 110'
-df.loc[df.staard_score_pre >= 110,'binned_staard_score_pre'] = 's <= 110'
+df.loc[df.staard_score_pre < 110,'binned_staard_score_pre'] = 's < 110'
+#df.loc[(df.staard_score_pre >= 90) & (df.staard_score_pre < 110),'binned_staard_score_pre'] = '90 <= s < 110'
+df.loc[df.staard_score_pre >= 110,'binned_staard_score_pre'] = 's >= 110'
 
 # <markdowncell>
 
@@ -519,7 +562,8 @@ df.loc[df.staard_score_pre >= 110,'binned_staard_score_pre'] = 's <= 110'
 # <codecell>
 
 ## run samples
-unqvals_binned_prescore = ['s < 90', '90 <= s < 110', 's <= 110']
+# unqvals_binned_prescore = ['s < 90', '90 <= s < 110', 's >= 110']
+unqvals_binned_prescore = ['s < 110', 's >= 110']
 traces_ind_binned_prescore = OrderedDict()
 for binned_prescore in unqvals_binned_prescore:
     x = df.loc[df.binned_staard_score_pre == binned_prescore, 'staard_score_pre']
@@ -559,6 +603,9 @@ with pm.Model() as hierarchical_model:
 
 plot_reg_bayes(df, xy ,traces_ind_binned_prescore, traces_hier_binned_prescore
                , feat='binned_staard_score_pre', burn_ind=2000, burn_hier=50000)
+
+# <codecell>
+
 
 # <markdowncell>
 
