@@ -139,37 +139,48 @@ def get_traces_hierarchical(x, y, idxs, max_iter=100000):
 
 
 
-def plot_reg_bayes(df, xy, traces_ind, traces_hier, feat='no_feat', burn_ind=2000, burn_hier=None, quad=False):
+def plot_reg_bayes(df, xy, traces_ind, traces_hier, feat='no_feat', burn_ind=2000, burn_hier=None, quad=False, clr_school=True):
     """ create plot for bayesian derived regression lines, no groups """
     
     keys = traces_ind.keys()         
     fig, axes1d = plt.subplots(nrows=1, ncols=len(keys), sharex=True, sharey=True, figsize=(8*len(keys),8))
     fig.suptitle('Bayesian hierarchical regression of pre-test vs post-test scores')
-    cm_cmap = cm.get_cmap('Set3')
+    cm_cmap = cm.get_cmap('Set2')
 
     clrs = {}
     clrs['ind'] = ['#00F5FF','#006266','#00585C']
-    clrs['hier'] = ['#FF7538','#661f00','#572610']  
+    clrs['hier'] = ['#FF7538','#661f00','#572610']
+    
+    point_clrs = 'cm_cmap(grp.clr)' if clr_school else 'cm_cmap(j/len(keys))'
     
     if len(keys) == 1:
         axes1d = [axes1d]
         
     for j, (sp, key) in enumerate(zip(axes1d,keys)):
-       
+        
         # scatterplot datapoints and subplot count title
-        x = df.loc[:,xy['x']]
-        y = df.loc[:,xy['y']]
+        if feat == 'no_feat':
+            x = df[xy['x']]
+            for grpkey, grp in df.groupby('schoolid'):
+                sp.scatter(grp[xy['x']],grp[xy['y']],s=40,color=eval(point_clrs),label='{} ({})'.format(grpkey,len(grp))
+                           ,alpha=0.7,edgecolor='#333333')
 
         if feat != 'no_feat':
             x = df.loc[df[feat] == key,xy['x']]
-            y = df.loc[df[feat] == key,xy['y']]               
-
-        sp.scatter(x,y,s=40,color=cm_cmap(j/len(keys)),alpha=0.7,edgecolor='#333333')
+            for grpkey, grp in df.loc[df[feat] == key].groupby('schoolid'):
+                sp.scatter(grp[xy['x']],grp[xy['y']],s=40,color=eval(point_clrs),label='{} ({})'.format(grpkey,len(grp))
+                           ,alpha=0.7,edgecolor='#333333')
+            
         sp.annotate('{} ({} samples)'.format(key,len(x))
             ,xy=(0.5,1),xycoords='axes fraction',size=14,ha='center'
             ,xytext=(0,6),textcoords='offset points')
 
+        if clr_school:
+            sp.legend(scatterpoints=1, loc=8, ncol=1, bbox_to_anchor=(1.0, 0.4),fancybox=True, shadow=True)
+        
+        # setup xlims and plot 1:1 line
         xfit = np.linspace(x.min(), x.max(), 10)
+        sp.plot(xfit,xfit,linestyle='dashed',color='#666666')
         
         # plot regression: individual
         alpha = traces_ind[key]['alpha'][burn_ind:]
@@ -186,7 +197,7 @@ def plot_reg_bayes(df, xy, traces_ind, traces_hier, feat='no_feat', burn_ind=200
         yerr_975 = np.percentile(yfit,97.5,axis=0)
         yerr_025 = np.percentile(yfit,2.5,axis=0)
         
-        sp.plot(xfit, mu,linewidth=2, color=clrs['ind'][0], alpha=0.8)
+        sp.plot(xfit, mu,linewidth=3, color=clrs['ind'][0], alpha=0.8)
         sp.fill_between(xfit, yerr_025, yerr_975, color=clrs['ind'][2],alpha=0.3)
         sp.annotate(note,xy=(1,0),xycoords='axes fraction',xytext=(-12,6),textcoords='offset points'
                 ,color=clrs['ind'][1],weight='bold',size=12,ha='right',va='bottom')
@@ -207,7 +218,7 @@ def plot_reg_bayes(df, xy, traces_ind, traces_hier, feat='no_feat', burn_ind=200
             yerr_975 = np.percentile(yfit,97.5,axis=0)
             yerr_025 = np.percentile(yfit,2.5,axis=0)
 
-            sp.plot(xfit, mu,linewidth=2, color=clrs['hier'][0], alpha=0.8)
+            sp.plot(xfit, mu,linewidth=3, color=clrs['hier'][0], alpha=0.8)
             sp.fill_between(xfit, yerr_025, yerr_975, color=clrs['hier'][2], alpha=0.3)
             sp.annotate(note, xy=(0,1),xycoords='axes fraction',xytext=(12,-6),textcoords='offset points'
                 ,color=clrs['hier'][1],weight='bold',size=12,ha='left',va='top')
@@ -253,6 +264,18 @@ dfa.boxplot(column='staard_score_pre',by='testtype',sym='k+',vert=False
 # <codecell>
 
 df = dfa.loc[dfa.staard_score_pre < 140].copy()
+df.shape
+
+# <markdowncell>
+
+# ### Add color feature to school
+
+# <codecell>
+
+df_schoolkey = df.groupby('schoolid').size().reset_index()
+df_schoolkey['clr'] = np.arange(0,1,1/len(df_schoolkey))
+df_schoolkey.drop(0,inplace=True)
+df = pd.merge(df, df_schoolkey, how ='left',left_on='schoolid', right_on='schoolid')
 df.shape
 
 # <markdowncell>
@@ -510,9 +533,9 @@ for binned_age in unqvals_binned_age:
 # <codecell>
 
 ## view parameters
-for binned_age in unqvals_binned_age:
-    print('Estimates for: {}'.format(binned_age))
-    pm.traceplot(traces_ind_binned_age[binned_age],figsize=(18,1.5*3))
+# for binned_age in unqvals_binned_age:
+#     print('Estimates for: {}'.format(binned_age))
+#     pm.traceplot(traces_ind_binned_age[binned_age],figsize=(18,1.5*3))
 
 # <markdowncell>
 
@@ -552,7 +575,7 @@ plot_reg_bayes(df, xy ,traces_ind_binned_age, traces_hier_binned_age
 
 # Bin prescore
 df.loc[df.staard_score_pre < 110,'binned_staard_score_pre'] = 's < 110'
-#df.loc[(df.staard_score_pre >= 90) & (df.staard_score_pre < 110),'binned_staard_score_pre'] = '90 <= s < 110'
+df.loc[(df.staard_score_pre >= 90) & (df.staard_score_pre < 110),'binned_staard_score_pre'] = '90 <= s < 110'
 df.loc[df.staard_score_pre >= 110,'binned_staard_score_pre'] = 's >= 110'
 
 # <markdowncell>
@@ -562,8 +585,8 @@ df.loc[df.staard_score_pre >= 110,'binned_staard_score_pre'] = 's >= 110'
 # <codecell>
 
 ## run samples
-# unqvals_binned_prescore = ['s < 90', '90 <= s < 110', 's >= 110']
-unqvals_binned_prescore = ['s < 110', 's >= 110']
+unqvals_binned_prescore = ['s < 90', '90 <= s < 110', 's >= 110']
+# unqvals_binned_prescore = ['s < 110', 's >= 110']
 traces_ind_binned_prescore = OrderedDict()
 for binned_prescore in unqvals_binned_prescore:
     x = df.loc[df.binned_staard_score_pre == binned_prescore, 'staard_score_pre']
@@ -603,9 +626,6 @@ with pm.Model() as hierarchical_model:
 
 plot_reg_bayes(df, xy ,traces_ind_binned_prescore, traces_hier_binned_prescore
                , feat='binned_staard_score_pre', burn_ind=2000, burn_hier=50000)
-
-# <codecell>
-
 
 # <markdowncell>
 
