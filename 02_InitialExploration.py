@@ -420,9 +420,9 @@ for testtype in unqvals_testtype:
 # <codecell>
 
 ## view parameters
-# for testtype in unqvals_testtype:
-#     print('Estimates for: {}'.format(testtype))
-#     pm.traceplot(traces_ind_testtype[testtype],figsize=(18,1.5*3))
+for testtype in unqvals_testtype:
+    print('Estimates for: {}'.format(testtype))
+    pm.traceplot(traces_ind_testtype[testtype],figsize=(18,1.5*3))
 
 # <markdowncell>
 
@@ -438,8 +438,8 @@ traces_hier_testtype = get_traces_hierarchical(df[xy['x']], df[xy['y']], idxs, m
 # <codecell>
 
 ## view parameters
-# with pm.Model() as hierarchical_model:
-#     pm.traceplot(traces_hier_testtype,figsize=(16,1.5*7))
+with pm.Model() as hierarchical_model:
+    pm.traceplot(traces_hier_testtype,figsize=(16,1.5*7))
 
 # <markdowncell>
 
@@ -472,9 +472,9 @@ for gender in unqvals_gender:
 # <codecell>
 
 ## view parameters
-# for gender in unqvals_gender:
-#     print('Estimates for: {}'.format(gender))
-#     pm.traceplot(traces_ind_gender[gender],figsize=(18,1.5*3))
+for gender in unqvals_gender:
+    print('Estimates for: {}'.format(gender))
+    pm.traceplot(traces_ind_gender[gender],figsize=(18,1.5*3))
 
 # <markdowncell>
 
@@ -490,8 +490,8 @@ traces_hier_gender = get_traces_hierarchical(df[xy['x']], df[xy['y']], idxs, max
 # <codecell>
 
 ## view parameters
-# with pm.Model() as hierarchical_model:
-#     pm.traceplot(traces_hier_gender,figsize=(18,1.5*7))
+with pm.Model() as hierarchical_model:
+    pm.traceplot(traces_hier_gender,figsize=(18,1.5*7))
 
 # <markdowncell>
 
@@ -533,9 +533,9 @@ for binned_age in unqvals_binned_age:
 # <codecell>
 
 ## view parameters
-# for binned_age in unqvals_binned_age:
-#     print('Estimates for: {}'.format(binned_age))
-#     pm.traceplot(traces_ind_binned_age[binned_age],figsize=(18,1.5*3))
+for binned_age in unqvals_binned_age:
+    print('Estimates for: {}'.format(binned_age))
+    pm.traceplot(traces_ind_binned_age[binned_age],figsize=(18,1.5*3))
 
 # <markdowncell>
 
@@ -551,8 +551,8 @@ traces_hier_binned_age = get_traces_hierarchical(df[xy['x']], df[xy['y']], idxs,
 # <codecell>
 
 ## view parameters
-# with pm.Model() as hierarchical_model:
-#     pm.traceplot(traces_hier_binned_age,figsize=(18,1.5*7))
+with pm.Model() as hierarchical_model:
+    pm.traceplot(traces_hier_binned_age,figsize=(18,1.5*7))
 
 # <markdowncell>
 
@@ -574,7 +574,7 @@ plot_reg_bayes(df, xy ,traces_ind_binned_age, traces_hier_binned_age
 # <codecell>
 
 # Bin prescore
-df.loc[df.staard_score_pre < 110,'binned_staard_score_pre'] = 's < 110'
+df.loc[df.staard_score_pre < 90,'binned_staard_score_pre'] = 's < 90'
 df.loc[(df.staard_score_pre >= 90) & (df.staard_score_pre < 110),'binned_staard_score_pre'] = '90 <= s < 110'
 df.loc[df.staard_score_pre >= 110,'binned_staard_score_pre'] = 's >= 110'
 
@@ -597,9 +597,9 @@ for binned_prescore in unqvals_binned_prescore:
 # <codecell>
 
 ## view parameters
-# for binned_prescore in unqvals_binned_prescore:
-#     print('Estimates for: {}'.format(binned_prescore))
-#     pm.traceplot(traces_ind_binned_prescore[binned_prescore],figsize=(18,1.5*3))
+for binned_prescore in unqvals_binned_prescore:
+    print('Estimates for: {}'.format(binned_prescore))
+    pm.traceplot(traces_ind_binned_prescore[binned_prescore],figsize=(18,1.5*3))
 
 # <markdowncell>
 
@@ -626,6 +626,19 @@ with pm.Model() as hierarchical_model:
 
 plot_reg_bayes(df, xy ,traces_ind_binned_prescore, traces_hier_binned_prescore
                , feat='binned_staard_score_pre', burn_ind=2000, burn_hier=50000)
+
+# <markdowncell>
+
+# ### Write data post-regression to SQL DB for temporary storage
+
+# <codecell>
+
+## write to local sqlite file
+cnx_sql3 = sqlite3.connect('data/SUAS_data_master_v001_tcc_cleaned.db')
+df['date_pre'] = df['date_pre'].apply(str)
+df['date_post'] = df['date_post'].apply(str)
+df.to_sql('df_post_reg',cnx_sql3,if_exists='replace')
+cnx_sql3.close()
 
 # <markdowncell>
 
