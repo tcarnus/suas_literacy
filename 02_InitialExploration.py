@@ -24,6 +24,7 @@
 #     + [Entire Set](#Entire-Set)  
 #     + [Test Type](#Test-Type)  
 #     + [Gender](#Gender)
+#     + [School](#School)
 #     + [Binned Age](#Binned-Age)
 #     + [Binned PreScore](#Binned-PreScore)
 
@@ -182,7 +183,7 @@ def plot_reg_bayes(df, xy, traces_ind, traces_hier, feat='no_feat', burn_ind=200
         
         # setup xlims and plot 1:1 line # BODGED the xlims
         xfit = np.linspace(x.min(), x.max(), 10)
-        sp.plot(np.array([65,135]),np.array([65,135]),linestyle='dashed',linewidth=0.5,color='#999999')
+        sp.plot(np.array([65,135]),np.array([65,135]),linestyle='dotted',linewidth=0.5,color='#666666')
         
         # plot actual data mean
         sp.scatter(x.mean(),y.mean(),marker='+',s=500,color='#551A8B')
@@ -192,15 +193,15 @@ def plot_reg_bayes(df, xy, traces_ind, traces_hier, feat='no_feat', burn_ind=200
         beta = traces_ind[key]['beta'][burn_ind:]
         yfit = alpha[:, None] + beta[:, None] * xfit   # <- yfit for all samples at x in xfit ind
         yfit_at_xmean = alpha[:, None] + beta[:, None] * x.mean()
-        note = '{}\nslope:  {:.2f}\nincpt: {:.2f}\niamx:  {:.2f}'.format('individual'
-                            ,beta.mean(),alpha.mean(),yfit_at_xmean.mean()-x.mean())
+        note = '{}\nslope:  {:.2f}\nincpt: {:.2f}\nmeanx: {:.2f}\nin@mx: {:.2f}'.format('individual'
+                            ,beta.mean(), alpha.mean(), x.mean(), yfit_at_xmean.mean()-x.mean())
         
         if quad:
             gamma = traces_ind[key]['gamma'][burn_ind:]
             yfit = alpha[:, None] + beta[:, None] * xfit + gamma[:, None] * xfit ** 2
             yfit_at_xmean = alpha[:, None] + beta[:, None] * x.mean() + gamma[:, None] * x.mean() ** 2
-            note = '{}\ny={:.2f} + {:.2f}x + {:.3f}x^2\niamx:  {:.2f}'.format('individual'
-                        ,alpha.mean(),beta.mean(),gamma.mean(),yfit_at_xmean.mean()-x.mean())
+            note = '{}\ny={:.2f} + {:.2f}x + {:.3f}x^2\nmeanx: {:.2f}\nin@mx: {:.2f}'.format('individual'
+                        ,alpha.mean(),beta.mean(),gamma.mean(),x.mean(), yfit_at_xmean.mean()-x.mean())
         
         mu = yfit.mean(0)
         yerr_975 = np.percentile(yfit,97.5,axis=0)
@@ -217,8 +218,8 @@ def plot_reg_bayes(df, xy, traces_ind, traces_hier, feat='no_feat', burn_ind=200
             beta = traces_hier['beta'][burn_hier:,j]
             yfit = alpha[:, None] + beta[:, None] * xfit
             yfit_at_xmean = alpha[:, None] + beta[:, None] * x.mean()
-            note = '{}\nslope:  {:.2f}\nincpt: {:.2f}\niamx:  {:.2f}'.format('hierarchical'
-                                ,beta.mean(),alpha.mean(),yfit_at_xmean.mean()-x.mean())
+            note = '{}\nslope:  {:.2f}\nincpt: {:.2f}\nmeanx: {:.2f}\nin@mx: {:.2f}'.format('hierarchical'
+                                ,beta.mean(),alpha.mean(),x.mean(),yfit_at_xmean.mean()-x.mean())
             
 #             if quad:
 #                 gamma = traces_hier['gamma'][burn_hier:,j]
@@ -512,6 +513,58 @@ with pm.Model() as hierarchical_model:
 
 plot_reg_bayes(df, xy ,traces_ind_gender, traces_hier_gender
                , feat='gender', burn_ind=2000, burn_hier=50000)
+
+# <headingcell level=2>
+
+# School
+
+# <markdowncell>
+
+# ### Unpooled
+
+# <codecell>
+
+## run sampling
+unqvals_school = np.unique(df.schoolid)
+traces_ind_school = OrderedDict()
+for school in unqvals_school:
+    x = df.loc[df.schoolid == school, 'staard_score_pre']
+    y = df.loc[df.schoolid == school, 'staard_score_post']
+    traces_ind_school[school] = get_traces_individual(x, y, max_iter=10000)  
+    
+
+# <codecell>
+
+## view parameters
+for school in unqvals_school:
+    print('Estimates for: {}'.format(school))
+    pm.traceplot(traces_ind_school[school],figsize=(18,1.5*3))
+
+# <markdowncell>
+
+# ### Hierarchical
+
+# <codecell>
+
+## run sampling
+unqvals_translator = {v:k for k,v in enumerate(unqvals_school)}
+idxs = [unqvals_translator[v] for v in df.schoolid]
+traces_hier_school = get_traces_hierarchical(df[xy['x']], df[xy['y']], idxs, max_iter=100000)
+
+# <codecell>
+
+## view parameters
+with pm.Model() as hierarchical_model:
+    pm.traceplot(traces_hier_school,figsize=(18,1.5*7))
+
+# <markdowncell>
+
+# ### Plot comparison of hierarchical vs unpooled
+
+# <codecell>
+
+plot_reg_bayes(df, xy ,traces_ind_school, traces_hier_school
+               , feat='schoolid', burn_ind=2000, burn_hier=50000)
 
 # <headingcell level=2>
 
