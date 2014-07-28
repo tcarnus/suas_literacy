@@ -161,12 +161,14 @@ def plot_reg_bayes(df, xy, traces_ind, traces_hier, feat='no_feat', burn_ind=200
         # scatterplot datapoints and subplot count title
         if feat == 'no_feat':
             x = df[xy['x']]
+            y = df[xy['y']]
             for grpkey, grp in df.groupby('schoolid'):
                 sp.scatter(grp[xy['x']],grp[xy['y']],s=40,color=eval(point_clrs),label='{} ({})'.format(grpkey,len(grp))
                            ,alpha=0.7,edgecolor='#333333')
 
         if feat != 'no_feat':
             x = df.loc[df[feat] == key,xy['x']]
+            y = df.loc[df[feat] == key,xy['y']]
             for grpkey, grp in df.loc[df[feat] == key].groupby('schoolid'):
                 sp.scatter(grp[xy['x']],grp[xy['y']],s=40,color=eval(point_clrs),label='{} ({})'.format(grpkey,len(grp))
                            ,alpha=0.7,edgecolor='#333333')
@@ -176,17 +178,22 @@ def plot_reg_bayes(df, xy, traces_ind, traces_hier, feat='no_feat', burn_ind=200
             ,xytext=(0,6),textcoords='offset points')
 
         if clr_school:
-            sp.legend(scatterpoints=1, loc=8, ncol=1, bbox_to_anchor=(1.0, 0.4),fancybox=True, shadow=True)
+            sp.legend(scatterpoints=1, loc=8, ncol=1, bbox_to_anchor=(1.0, 0.35), fancybox=True, shadow=True)
         
-        # setup xlims and plot 1:1 line
+        # setup xlims and plot 1:1 line # BODGED the xlims
         xfit = np.linspace(x.min(), x.max(), 10)
-        sp.plot(xfit,xfit,linestyle='dashed',color='#666666')
+        sp.plot(np.array([65,135]),np.array([65,135]),linestyle='dashed',linewidth=0.5,color='#999999')
+        
+        # plot actual data mean
+        sp.scatter(x.mean(),y.mean(),marker='+',s=500,color='#551A8B')
         
         # plot regression: individual
         alpha = traces_ind[key]['alpha'][burn_ind:]
         beta = traces_ind[key]['beta'][burn_ind:]
         yfit = alpha[:, None] + beta[:, None] * xfit   # <- yfit for all samples at x in xfit ind
-        note = '{}\nslope:  {:.2f}\nincpt: {:.2f}'.format('individual',beta.mean(),alpha.mean())
+        yfit_at_xmean = alpha[:, None] + beta[:, None] * x.mean()
+        note = '{}\nslope:  {:.2f}\nincpt: {:.2f}\niamx:  {:.2f}'.format('individual'
+                            ,beta.mean(),alpha.mean(),yfit_at_xmean.mean()-x.mean())
         
         if quad:
             gamma = traces_ind[key]['gamma'][burn_ind:]
@@ -207,7 +214,9 @@ def plot_reg_bayes(df, xy, traces_ind, traces_hier, feat='no_feat', burn_ind=200
             alpha = traces_hier['alpha'][burn_hier:,j]
             beta = traces_hier['beta'][burn_hier:,j]
             yfit = alpha[:, None] + beta[:, None] * xfit
-            note = '{}\nslope:  {:.2f}\nincpt: {:.2f}'.format('hierarchical',beta.mean(),alpha.mean())
+            yfit_at_xmean = alpha[:, None] + beta[:, None] * x.mean()
+            note = '{}\nslope:  {:.2f}\nincpt: {:.2f}\niamx:  {:.2f}'.format('hierarchical'
+                                ,beta.mean(),alpha.mean(),yfit_at_xmean.mean()-x.mean())
             
 #             if quad:
 #                 gamma = traces_hier['gamma'][burn_hier:,j]
@@ -220,8 +229,8 @@ def plot_reg_bayes(df, xy, traces_ind, traces_hier, feat='no_feat', burn_ind=200
 
             sp.plot(xfit, mu,linewidth=3, color=clrs['hier'][0], alpha=0.8)
             sp.fill_between(xfit, yerr_025, yerr_975, color=clrs['hier'][2], alpha=0.3)
-            sp.annotate(note, xy=(0,1),xycoords='axes fraction',xytext=(12,-6),textcoords='offset points'
-                ,color=clrs['hier'][1],weight='bold',size=12,ha='left',va='top')
+            sp.annotate(note, xy=(0,1),xycoords='axes fraction',xytext=(100,-6),textcoords='offset points'
+                ,color=clrs['hier'][1],weight='bold',size=12,ha='right',va='top')
         
     plt.show()
 
