@@ -198,7 +198,9 @@ def plot_reg_bayes(df, xy, traces_ind, traces_hier, feat='no_feat', burn_ind=200
         if quad:
             gamma = traces_ind[key]['gamma'][burn_ind:]
             yfit = alpha[:, None] + beta[:, None] * xfit + gamma[:, None] * xfit ** 2
-            note = '{}\ny={:.2f} + {:.2f}x + {:.2f}x^2'.format('individual',alpha.mean(),beta.mean(),gamma.mean())
+            yfit_at_xmean = alpha[:, None] + beta[:, None] * x.mean() + gamma[:, None] * x.mean() ** 2
+            note = '{}\ny={:.2f} + {:.2f}x + {:.3f}x^2\niamx:  {:.2f}'.format('individual'
+                        ,alpha.mean(),beta.mean(),gamma.mean(),yfit_at_xmean.mean()-x.mean())
         
         mu = yfit.mean(0)
         yerr_975 = np.percentile(yfit,97.5,axis=0)
