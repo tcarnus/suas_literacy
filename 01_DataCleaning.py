@@ -209,6 +209,22 @@ df_clean.drop(['test_color','ind'],axis=1,inplace=True)
 
 ## reshape the dataframe to person-oriented
 df_clean.reset_index(inplace=True)
+
+# <markdowncell>
+
+# #### Correct GroupWRAT
+
+# <codecell>
+
+df_clean.loc[df_clean.testtype=='group_wrat','testtype'] = 'acceleread_accelewrite'
+
+# <headingcell level=2>
+
+# Reshape dataframe
+
+# <codecell>
+
+## reshape the dataframe to person-oriented
 df_clean.set_index(['code','schoolid','gender','test','testtype','preorpost'],inplace=True)
 df_piv = df_clean.unstack(['preorpost'])
 
